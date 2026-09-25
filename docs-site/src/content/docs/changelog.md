@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **(pdf): retain grouped headings above shaded table columns.** Ignore repeated inset background edges inside an already ruled band, find wider cells when a divider ends at the header, and attach spanning headings to an established body grid. Header-only fragments remain separate so they do not suppress fallback extraction of an unruled body. (GH#1803)
+
 - **(pdf): preserve text throughout row- and column-spanning table cells.** Intermediate grid boundaries introduced by neighbouring cells no longer make parts of a detected cell appear empty. Text is assigned once, and text outside detected cells remains excluded. (GH#1802)
 
 ## [1.2.9] - 2026-09-24
