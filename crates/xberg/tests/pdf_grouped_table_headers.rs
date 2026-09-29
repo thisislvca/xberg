@@ -119,11 +119,15 @@ fn grouped_headers_survive_with_and_without_inset_backgrounds() {
                     .map(|c| (c.content.as_str(), c.col, c.col_span))
                     .collect();
                 assert_eq!(headers, [("First", 0, 2), ("Second", 2, 2), ("Third", 4, 2)]);
-                assert!(
-                    result.tables[0]
-                        .markdown
-                        .lines()
-                        .all(|line| line.matches('|').count() == 7)
+                assert_eq!(
+                    result.tables[0].markdown,
+                    concat!(
+                        "| First |  | Second |  | Third |  |\n",
+                        "| --- | --- | --- | --- | --- | --- |\n",
+                        "| R645C0 | R645C1 | R645C2 | R645C3 | R645C4 | R645C5 |\n",
+                        "| R625C0 | R625C1 | R625C2 | R625C3 | R625C4 | R625C5 |\n",
+                        "| R605C0 | R605C1 | R605C2 | R605C3 | R605C4 | R605C5 |\n",
+                    )
                 );
                 for (row, y) in [645, 625, 605].into_iter().enumerate() {
                     let expected: Vec<_> = (0..6).map(|column| format!("R{y}C{column}")).collect();
