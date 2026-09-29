@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **(pdf): numeric footnotes stay separate in structured paragraphs as well as page text.** A reference such as `comma 3` followed by note `5` no longer becomes `comma 35` in `document.nodes` or Markdown. Inline-script rejoining now uses the same matching-note evidence as plain-text extraction; scripts without that evidence and adjacent mathematical expressions retain their existing joins.
+
 ## [1.3.0] - 2026-09-28
 
 ### Added
