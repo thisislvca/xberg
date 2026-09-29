@@ -562,6 +562,24 @@ fn raw_block_node_content(elem: &mut InternalElement) -> NodeContent {
 
 /// Convert an internal `Table` to a `TableGrid`.
 fn table_to_grid(table: &Table) -> TableGrid {
+    // Later table repair may replace the dense cells. Only reuse native geometry
+    // while its dimensions and text still describe that same table.
+    if let Some(grid) = &table.native_grid
+        && grid.rows as usize == table.cells.len()
+        && table.cells.iter().all(|row| row.len() == grid.cols as usize)
+        && grid.cells.iter().all(|cell| {
+            table
+                .cells
+                .get(cell.row as usize)
+                .and_then(|row| row.get(cell.col as usize))
+                == Some(&cell.content)
+        })
+        && grid.cells.iter().filter(|cell| !cell.content.is_empty()).count()
+            == table.cells.iter().flatten().filter(|cell| !cell.is_empty()).count()
+    {
+        return grid.clone();
+    }
+
     let rows = table.cells.len() as u32;
     let cols = table.cells.iter().map(|r| r.len()).max().unwrap_or(0) as u32;
 

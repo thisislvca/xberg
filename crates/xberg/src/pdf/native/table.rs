@@ -128,7 +128,7 @@ pub(crate) fn extract_tables_native(doc: &mut NativeDocument) -> Result<(Vec<Tab
                 continue;
             }
 
-            let (cells, markdown) = convert_extracted_table(&extracted_table);
+            let (cells, markdown, grid) = convert_extracted_table(&extracted_table);
 
             if cells.is_empty() || markdown.trim().is_empty() {
                 continue;
@@ -152,6 +152,7 @@ pub(crate) fn extract_tables_native(doc: &mut NativeDocument) -> Result<(Vec<Tab
             });
 
             all_tables.push(Table {
+                native_grid: grid,
                 cells,
                 markdown,
                 page_number,
@@ -246,7 +247,7 @@ pub(crate) fn extract_tables_bordered(
                 continue;
             }
 
-            let (cells, markdown) = convert_extracted_table(&extracted_table);
+            let (cells, markdown, grid) = convert_extracted_table(&extracted_table);
 
             if cells.is_empty() || markdown.trim().is_empty() {
                 continue;
@@ -270,6 +271,7 @@ pub(crate) fn extract_tables_bordered(
             });
 
             all_tables.push(Table {
+                native_grid: grid,
                 cells,
                 markdown,
                 page_number,
@@ -2164,40 +2166,107 @@ fn is_script_run_of(previous: &xberg_native_pdf::layout::TextSpan, next: &xberg_
 ///
 /// Cell text is reconstructed from span positions in reading order (see
 /// [`cell_text_in_reading_order`]) when span data is available.
-fn convert_extracted_table(table: &xberg_native_pdf::structure::table_extractor::Table) -> (Vec<Vec<String>>, String) {
-    let mut cells: Vec<Vec<String>> = Vec::with_capacity(table.rows.len());
-    let mut markdown = String::new();
-    let mut found_header = false;
+fn convert_extracted_table(
+    table: &xberg_native_pdf::structure::table_extractor::Table,
+) -> (Vec<Vec<String>>, String, Option<crate::types::TableGrid>) {
+    use crate::extraction::grid_flatten::{
+        MAX_COL_SPAN, MAX_ROW_SPAN, SpanCell, flatten_spanned_rows, resolve_span_grid,
+    };
+    use crate::types::{GridCell, TableGrid};
 
-    for (row_idx, row) in table.rows.iter().enumerate() {
-        let row_cells: Vec<String> = row.cells.iter().map(cell_text_in_reading_order).collect();
-
-        markdown.push('|');
-        for cell in &row_cells {
-            markdown.push(' ');
-            markdown.push_str(cell);
-            markdown.push_str(" |");
-        }
-        markdown.push('\n');
-
-        if (row.is_header || row_idx == 0) && !found_header {
-            found_header = true;
-            markdown.push('|');
-            for _ in &row_cells {
-                markdown.push_str(" --- |");
+    let rows: Vec<Vec<SpanCell>> = table
+        .rows
+        .iter()
+        .map(|row| {
+            row.cells
+                .iter()
+                .map(|cell| SpanCell::new(cell_text_in_reading_order(cell), cell.rowspan, cell.colspan))
+                .collect()
+        })
+        .collect();
+    // Ordinary tables need no extra geometry payload.
+    let grid = rows
+        .iter()
+        .flatten()
+        .any(|cell| cell.col_span > 1 || cell.row_span > 1)
+        .then(|| {
+            let mut grid_cells = Vec::new();
+            let cols = resolve_span_grid(
+                &rows,
+                |c| c.col_span,
+                |c| c.row_span,
+                |row, col, cell| {
+                    grid_cells.push(GridCell {
+                        content: cell.content.clone(),
+                        row,
+                        col,
+                        row_span: cell.row_span.clamp(1, MAX_ROW_SPAN),
+                        col_span: cell.col_span.clamp(1, MAX_COL_SPAN),
+                        is_header: row == 0 || table.rows[row as usize].is_header,
+                        bbox: None,
+                        heading_level: None,
+                        style_name: None,
+                    });
+                },
+            );
+            TableGrid {
+                rows: rows.len() as u32,
+                cols,
+                cells: grid_cells,
             }
-            markdown.push('\n');
-        }
-
-        cells.push(row_cells);
-    }
-
-    (cells, markdown)
+        });
+    let cells = flatten_spanned_rows(&rows);
+    let markdown = crate::pdf::table_reconstruct::table_to_markdown(&cells);
+    (cells, markdown, grid)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn converted_spans_reserve_columns_without_duplicating_text() {
+        use xberg_native_pdf::structure::table_extractor::{Table as ExtractedTable, TableCell, TableRow};
+        let cell = |text: &str, rows, cols| TableCell {
+            text: text.into(),
+            rowspan: rows,
+            colspan: cols,
+            spans: vec![],
+            mcids: vec![],
+            bbox: None,
+            is_header: false,
+        };
+        let table = ExtractedTable {
+            rows: vec![
+                TableRow {
+                    cells: vec![cell("Group | A", 1, 2), cell("B", 1, 1)],
+                    is_header: true,
+                },
+                TableRow {
+                    cells: vec![cell("Label", 2, 1), cell("x", 1, 1), cell("1", 1, 1)],
+                    is_header: false,
+                },
+                TableRow {
+                    cells: vec![cell("y", 1, 1), cell("2", 1, 1)],
+                    is_header: false,
+                },
+            ],
+            col_count: 3,
+            has_header: true,
+            bbox: None,
+        };
+        let (cells, markdown, grid) = convert_extracted_table(&table);
+        let grid = grid.unwrap();
+        assert_eq!(
+            cells,
+            vec![vec!["Group | A", "", "B"], vec!["Label", "x", "1"], vec!["", "y", "2"]]
+        );
+        assert_eq!(grid.cells[0].col_span, 2);
+        assert_eq!((grid.cells[2].col, grid.cells[2].row_span), (0, 2));
+        assert_eq!((grid.cells[5].row, grid.cells[5].col), (2, 1));
+        assert_eq!(markdown.matches("Label").count(), 1);
+        assert!(markdown.contains("Group \\| A"));
+    }
 
     #[test]
     fn test_convert_extracted_table_basic() {
@@ -2257,7 +2326,7 @@ mod tests {
             bbox: None,
         };
 
-        let (cells, markdown) = convert_extracted_table(&table);
+        let (cells, markdown, _) = convert_extracted_table(&table);
         assert_eq!(cells.len(), 2);
         assert_eq!(cells[0], vec!["Name", "Age"]);
         assert_eq!(cells[1], vec!["Alice", "30"]);
@@ -2302,7 +2371,7 @@ mod tests {
             bbox: None,
         };
 
-        let (cells, markdown) = convert_extracted_table(&table);
+        let (cells, markdown, _) = convert_extracted_table(&table);
         assert_eq!(cells.len(), 2);
         assert!(markdown.contains("| --- |"));
     }
@@ -2318,7 +2387,7 @@ mod tests {
             bbox: None,
         };
 
-        let (cells, markdown) = convert_extracted_table(&table);
+        let (cells, markdown, _) = convert_extracted_table(&table);
         assert!(cells.is_empty());
         assert!(markdown.is_empty());
     }

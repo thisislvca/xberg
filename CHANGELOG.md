@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **(pdf): preserve grouped table header spans in structured output.** Native span geometry now reaches document nodes, while dense cells and Markdown retain consistent columns. Mixed row/column spans use the shared placement rules. (GH#1959)
+
 - **(pdf): a borderless table beside a prose column is no longer reconstructed across the page gutter.** The heuristic table pass now separates a dominant whitespace corridor before column detection, while rejecting a split that leaves labels on one side and values on the other so financial tables keep their rows. Recurring numeric tracks keep a real table with wrapped row labels from being rejected as flowing prose, and full-width blocks below the columns remain intact. (GH#1769)
 - **(ocr): a multi-word table header now stays in the data column it labels.** Header words that had already merged into one cell for column detection were split apart again during assignment, so a trailing word could move into the next header. A merged header is now assigned as one cell when its detected column has data rows, while header-only spans keep the existing fragment repair. (GH#1934)
 - **(ocr): shaded-row normalization no longer loses dark and mid-grey table rows.** Overlapping inversion boxes could invert part of a dark row twice, while normalized band edges could be read as `[` or `|` frame glyphs and hide otherwise recognized rows during table reconstruction. Overlapping boxes are now inverted once, and repeated normalization artifacts at a table's outer edges are removed before cell assignment. (GH#1837)
