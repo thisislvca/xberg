@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **(pdf): retain alignment instructions beside split description cells.** Cell detection now searches for a closing boundary on both sides instead of stopping at a neighbouring row separator. (GH#1958)
+
 ## [1.3.0] - 2026-09-28
 
 ### Added
@@ -29,8 +33,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **(pdf): `metadata.pages` is now populated for `ocr_near_empty_fallback` or `ocr_scanned_page_quality_gate` set without an `ocr` block, at parity with what an `ocr` block alone already produced.** The annotation fallback's implicit page-boundary tracking was discarded from `metadata.pages` based on a narrower, re-derived condition than the one that decides whether boundaries are tracked in the first place, so a caller relying on either GH#1752 setting alone still got `metadata.pages == None`. (GH#1752)
 
 ### Fixed
-
-- **(pdf): retain alignment instructions beside split description cells.** Cell detection now searches for a closing boundary on both sides instead of stopping at a neighbouring row separator. (GH#1958)
 
 - **(pdf): a borderless table beside a prose column is no longer reconstructed across the page gutter.** The heuristic table pass now separates a dominant whitespace corridor before column detection, while rejecting a split that leaves labels on one side and values on the other so financial tables keep their rows. Recurring numeric tracks keep a real table with wrapped row labels from being rejected as flowing prose, and full-width blocks below the columns remain intact. (GH#1769)
 - **(ocr): a multi-word table header now stays in the data column it labels.** Header words that had already merged into one cell for column detection were split apart again during assignment, so a trailing word could move into the next header. A merged header is now assigned as one cell when its detected column has data rows, while header-only spans keep the existing fragment repair. (GH#1934)
