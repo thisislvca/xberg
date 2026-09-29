@@ -80,7 +80,7 @@ fn row_spanning_label_is_retained_once_at_every_vertical_position() {
 
 #[test]
 fn neighbouring_description_rules_do_not_erase_alignment_cells() {
-    for separators in ["150 640 m 300 640 l S", "150 630 m 300 630 l S 150 640 m 300 640 l S"] {
+    for separators in ["150 640 m 300 640 l S", "150 635 m 300 635 l S 150 640 m 300 640 l S"] {
         let pdf = pdf_with_content(format!(
             "0.5 w 50 600 m 550 600 l S 50 620 m 550 620 l S 50 660 m 550 660 l S 50 690 m 550 690 l S \
              50 600 m 50 690 l S 150 600 m 150 690 l S 300 600 m 300 690 l S 450 600 m 450 690 l S 550 600 m 550 690 l S \
@@ -107,16 +107,20 @@ fn neighbouring_description_rules_do_not_erase_alignment_cells() {
             let result = extract_bytes_document_blocking(&pdf, "application/pdf", &config).unwrap();
             assert_eq!(result.tables.len(), 1);
             let cells = &result.tables[0].cells;
+            let group_start = cells.iter().position(|row| row[0] == "DT").unwrap();
+            let group_end = cells.iter().position(|row| row[0] == "Next").unwrap();
+            assert!(group_start < group_end, "{cells:?}");
             for text in ["Destra", "con 8 spazi"] {
-                assert_eq!(
-                    cells
-                        .iter()
-                        .filter(|row| row.get(2).is_some_and(|cell| cell.contains(text)))
-                        .count(),
-                    1,
-                    "{cells:?}"
-                );
+                let matching_rows: Vec<_> = cells
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, row)| row.get(2).is_some_and(|cell| cell.contains(text)))
+                    .map(|(row, _)| row)
+                    .collect();
+                assert_eq!(matching_rows.len(), 1, "{cells:?}");
+                assert!((group_start..group_end).contains(&matching_rows[0]), "{cells:?}");
             }
+            assert_eq!(cells[group_end][2], "Sinistra");
             assert!(!cells.iter().flatten().any(|cell| cell.contains("Outside")));
             let doc = result.document.unwrap();
             assert!(!doc.nodes.iter().any(|node| matches!(&node.content, NodeContent::Paragraph {text} if text.contains("con 8 spazi") || text.contains("Destra"))));
@@ -131,11 +135,24 @@ fn neighbouring_description_rules_do_not_erase_alignment_cells() {
                     }
                 })
                 .unwrap();
-            assert!(
-                grid.cells
-                    .iter()
-                    .any(|cell| cell.col == 2 && cell.content.contains("Destra"))
-            );
+            let structured_start = grid
+                .cells
+                .iter()
+                .find(|cell| cell.col == 0 && cell.content == "DT")
+                .unwrap()
+                .row;
+            let structured_end = grid
+                .cells
+                .iter()
+                .find(|cell| cell.col == 0 && cell.content == "Next")
+                .unwrap()
+                .row;
+            for text in ["Destra", "con 8 spazi"] {
+                let matches: Vec<_> = grid.cells.iter().filter(|cell| cell.content.contains(text)).collect();
+                assert_eq!(matches.len(), 1, "{grid:?}");
+                assert_eq!(matches[0].col, 2, "{grid:?}");
+                assert!((structured_start..structured_end).contains(&matches[0].row), "{grid:?}");
+            }
         }
     }
 }
