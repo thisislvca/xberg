@@ -336,15 +336,25 @@ impl RedactionPass<'_> {
         }
     }
 
+    /// Rewrite the dense table view and its native span geometry together.
+    fn redact_table(&mut self, table: &mut crate::types::Table) {
+        for row in &mut table.cells {
+            for cell in row {
+                self.redact_in_place(cell);
+            }
+        }
+        self.redact_in_place(&mut table.markdown);
+        if let Some(grid) = &mut table.native_grid {
+            for cell in &mut grid.cells {
+                self.redact_in_place(&mut cell.content);
+            }
+        }
+    }
+
     /// Rewrite the document-level table cells and their rendered markdown.
     fn redact_tables(&mut self, doc: &mut ExtractedDocument) {
-        for table in doc.tables.iter_mut() {
-            for row in table.cells.iter_mut() {
-                for cell in row.iter_mut() {
-                    self.redact_in_place(cell);
-                }
-            }
-            self.redact_in_place(&mut table.markdown);
+        for table in &mut doc.tables {
+            self.redact_table(table);
         }
     }
 
@@ -363,14 +373,8 @@ impl RedactionPass<'_> {
                     self.redact_in_place(&mut block.text);
                 }
             }
-            for table in page.tables.iter_mut() {
-                let table = std::sync::Arc::make_mut(table);
-                for row in table.cells.iter_mut() {
-                    for cell in row.iter_mut() {
-                        self.redact_in_place(cell);
-                    }
-                }
-                self.redact_in_place(&mut table.markdown);
+            for table in &mut page.tables {
+                self.redact_table(std::sync::Arc::make_mut(table));
             }
         }
     }
@@ -1215,6 +1219,77 @@ mod tests {
             rehydrated.contains(email) && rehydrated.contains(phone),
             "rehydrated: {rehydrated}"
         );
+    }
+
+    #[tokio::test]
+    async fn redacts_native_grid_in_document_and_shared_page_tables_without_losing_spans() {
+        use crate::types::{GridCell, PageContent, Table, TableGrid};
+        use std::sync::Arc;
+
+        let email = "alice@example.com";
+        let shared = Arc::new(Table {
+            cells: vec![vec![email.into(), String::new()]],
+            markdown: format!("| {email} |  |"),
+            native_grid: Some(TableGrid {
+                rows: 1,
+                cols: 2,
+                cells: vec![GridCell {
+                    content: email.into(),
+                    row: 0,
+                    col: 0,
+                    row_span: 1,
+                    col_span: 2,
+                    is_header: true,
+                    bbox: None,
+                    heading_level: None,
+                    style_name: None,
+                }],
+            }),
+            ..Default::default()
+        });
+        let mut doc = ExtractedDocument {
+            content: email.into(),
+            tables: vec![(*shared).clone()],
+            pages: Some(
+                (1..=2)
+                    .map(|page_number| PageContent {
+                        page_number,
+                        content: email.into(),
+                        tables: vec![shared.clone()],
+                        image_indices: Vec::new(),
+                        image_preprocessing: None,
+                        hierarchy: None,
+                        is_blank: None,
+                        layout_regions: None,
+                        speaker_notes: None,
+                        section_name: None,
+                        sheet_name: None,
+                        ocr_confidence: None,
+                    })
+                    .collect(),
+            ),
+            ..Default::default()
+        };
+        redact(&mut doc, &RedactionConfig::default()).await.unwrap();
+
+        for table in doc.tables.iter().chain(
+            doc.pages
+                .as_ref()
+                .unwrap()
+                .iter()
+                .flat_map(|page| page.tables.iter().map(Arc::as_ref)),
+        ) {
+            assert!(!table.cells[0][0].contains(email));
+            assert!(!table.markdown.contains(email));
+            let grid = table.native_grid.as_ref().unwrap();
+            assert_eq!((grid.rows, grid.cols), (1, 2));
+            assert_eq!(grid.cells.len(), 1);
+            let cell = &grid.cells[0];
+            assert!(!cell.content.contains(email));
+            assert_eq!((cell.row, cell.col, cell.row_span, cell.col_span), (0, 0, 1, 2));
+            assert!(cell.is_header);
+        }
+        assert_eq!(shared.native_grid.as_ref().unwrap().cells[0].content, email);
     }
 
     /// Regression for xberg-io/xberg#1223: redaction must mask PII on every
