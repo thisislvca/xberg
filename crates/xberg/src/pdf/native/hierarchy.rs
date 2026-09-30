@@ -551,7 +551,7 @@ fn emit_base_with_scripts(
         let mut normalized = normalize_script_span(&spans[script.script_index], base);
         // Structure assembly rejoins scripts before paragraph spacing sees them.
         // Carry the plain-text path's confirmed footnote boundary through that join;
-        // normalizing the script first would discard its original font/rise evidence.
+        // normalizing the script first would discard its original font/rise evidence. ~keep
         if script.separate_numeric_note {
             normalized.text.insert(0, ' ');
             normalized.char_x_offsets.clear();
