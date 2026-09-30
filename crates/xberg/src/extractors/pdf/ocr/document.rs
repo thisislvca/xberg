@@ -2312,7 +2312,6 @@ pub(super) fn recognized_table_to_public_table(
         table_id: Some(format!("table-{}", table_index + 1)),
         columns: recognized.cells.first().cloned(),
         cell_styles: Vec::new(),
-        native_grid: None,
     }
 }
 

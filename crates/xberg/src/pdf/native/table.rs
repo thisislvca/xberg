@@ -22,6 +22,12 @@ use crate::pdf::table_reconstruct::table_to_markdown;
 use crate::types::{BoundingBox, ProcessingWarning, Table};
 use std::collections::HashSet;
 
+#[derive(Debug)]
+pub(crate) struct NativeTable {
+    pub table: Table,
+    pub grid: Option<crate::types::TableGrid>,
+}
+
 /// Cap on candidate vertical regions per page. Real tables fit comfortably
 /// under this; prose-heavy pages can otherwise generate dozens of small
 /// regions that each go through `reconstruct_table` + `post_process_table`,
@@ -102,7 +108,7 @@ enum HeuristicTableRejection {
 /// failed (issue #74). A per-page failure is skipped rather than aborting the whole document,
 /// so without a warning that page would be silently indistinguishable from a page that simply
 /// has no table.
-pub(crate) fn extract_tables_native(doc: &mut NativeDocument) -> Result<(Vec<Table>, Vec<ProcessingWarning>)> {
+pub(crate) fn extract_tables_native(doc: &mut NativeDocument) -> Result<(Vec<NativeTable>, Vec<ProcessingWarning>)> {
     let page_count = doc
         .doc
         .page_count()
@@ -151,13 +157,15 @@ pub(crate) fn extract_tables_native(doc: &mut NativeDocument) -> Result<(Vec<Tab
                 y1: (rect.y + rect.height) as f64,
             });
 
-            all_tables.push(Table {
-                native_grid: grid,
-                cells,
-                markdown,
-                page_number,
-                bounding_box,
-                ..Default::default()
+            all_tables.push(NativeTable {
+                table: Table {
+                    cells,
+                    markdown,
+                    page_number,
+                    bounding_box,
+                    ..Default::default()
+                },
+                grid,
             });
         }
     }
@@ -201,7 +209,7 @@ fn native_table_extraction_failure_warning(page_number: u32, error: &xberg_nativ
 pub(crate) fn extract_tables_bordered(
     doc: &mut NativeDocument,
     skip_pages: &HashSet<u32>,
-) -> Result<(Vec<Table>, Vec<ProcessingWarning>)> {
+) -> Result<(Vec<NativeTable>, Vec<ProcessingWarning>)> {
     use xberg_native_pdf::structure::spatial_table_detector::{TableDetectionConfig, TableStrategy};
 
     let page_count = doc
@@ -270,13 +278,15 @@ pub(crate) fn extract_tables_bordered(
                 y1: (rect.y + rect.height) as f64,
             });
 
-            all_tables.push(Table {
-                native_grid: grid,
-                cells,
-                markdown,
-                page_number,
-                bounding_box,
-                ..Default::default()
+            all_tables.push(NativeTable {
+                table: Table {
+                    cells,
+                    markdown,
+                    page_number,
+                    bounding_box,
+                    ..Default::default()
+                },
+                grid,
             });
         }
     }
@@ -4292,7 +4302,7 @@ mod tests {
             !tables.is_empty(),
             "extract_tables_bordered must detect the 2-column stroke-bordered table"
         );
-        let table = &tables[0];
+        let table = &tables[0].table;
         assert_eq!(table.cells.len(), 5, "expected 5 rows, got {}", table.cells.len());
         assert!(
             table.cells.iter().all(|row| row.len() == 2),

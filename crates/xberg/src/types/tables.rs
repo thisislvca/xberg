@@ -10,13 +10,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[cfg_attr(feature = "api", derive(utoipa::ToSchema))]
 pub struct Table {
-    /// Native cell geometry retained until document-tree derivation. The public
-    /// `document.nodes` table grid carries this information; `cells` remains its
-    /// dense, span-flattened view for Markdown and existing consumers.
-    /// Kept out of bindings/serialization to avoid publishing two grid schemas.
-    #[serde(skip)]
-    #[cfg_attr(alef, alef(skip))]
-    pub native_grid: Option<super::document_structure::TableGrid>,
     /// Table cells as a 2D vector (rows × columns)
     pub cells: Vec<Vec<String>>,
     /// Markdown representation of the table

@@ -371,7 +371,6 @@ fn convert_ocr_table(index: usize, table: crate::types::OcrTable) -> crate::type
         table_id: Some(format!("table-{}", index + 1)),
         columns,
         cell_styles: Vec::new(),
-        native_grid: None,
     }
 }
 
