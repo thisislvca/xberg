@@ -1,0 +1,25 @@
+{
+  "use_cache": false,
+  "force_ocr": true,
+  "pages": {
+    "extract_pages": true
+  },
+  "concurrency": {
+    "max_threads": 2
+  },
+  "ocr": {
+    "backend": "tesseract",
+    "language": "eng",
+    "pipeline": {
+      "stages": [
+        {
+          "backend": "tesseract",
+          "backend_options": {
+            "use_cache": false
+          }
+        }
+      ]
+    },
+    "auto_rotate": false
+  }
+}
